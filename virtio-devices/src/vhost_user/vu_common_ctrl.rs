@@ -330,7 +330,8 @@ impl VhostUserHandle {
         acked_protocol_features: u64,
     ) -> Result<()> {
         self.vu.set_owner().map_err(Error::VhostUserSetOwner)?;
-        self.vu
+        let backend_features = self
+            .vu
             .get_features()
             .map_err(Error::VhostUserGetFeatures)?;
 
@@ -347,7 +348,13 @@ impl VhostUserHandle {
             }
         }
 
-        self.update_supported_features(acked_features, acked_protocol_features);
+        // The acked features passed in come from the device (the restored
+        // migration state, or the epoll handler on reconnect), i.e. what the
+        // guest acked. VHOST_F_LOG_ALL is a vhost-user feature the guest never
+        // acks, so take it from the backend like the initial negotiation does,
+        // otherwise the device can't be migrated again.
+        let log_all = backend_features & VhostUserVirtioFeatures::LOG_ALL.bits();
+        self.update_supported_features(acked_features | log_all, acked_protocol_features);
 
         Ok(())
     }
